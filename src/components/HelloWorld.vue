@@ -14,10 +14,8 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { AnimationAction, AnimationMixer, AnimationClip } from "three";
-import { DragControls } from "three/addons/controls/DragControls";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 let canvasDOM;
 let scene: any;
 let camera: any;
@@ -179,10 +177,10 @@ function playAnimation(name: string) {
     
     // 设置动画过渡
     currentAnimation.reset()    // 重置动画状态
-      .setLoop(THREE.LoopRepeat) // 设置循环播放
-      .crossFadeFrom(mixer.existingAction || currentAnimation, 0.5, true); // 与上一个动画交叉淡入淡出
+      .setLoop(THREE.LoopRepeat, 10 ) // 设置循环播放
+      .crossFadeFrom(mixer.existingAction as unknown as THREE.AnimationAction || currentAnimation, 0.5, true); // 与上一个动画交叉淡入淡出
     // 保存当前动画以供下次过渡使用
-    mixer.existingAction = currentAnimation;
+    (mixer as any).existingAction = currentAnimation;
   }
 }
 
