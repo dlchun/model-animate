@@ -1,7 +1,11 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:16'  // 包含 git 的 Node.js 镜像
+            args '-v $HOME/.npm:/root/.npm'
+        }
+    }
     
-    // 环境变量
     environment {
         // 项目配置
         PROJECT_NAME = 'model-animate'
@@ -11,109 +15,44 @@ pipeline {
         REMOTE_SERVER = '192.168.101.142'          // 替换为你的服务器 IP
         REMOTE_USER = 'root'                 // 替换为你的服务器用户名
         REMOTE_PATH = '/usr/html/dev'  // 替换为你的部署路径
-        SSH_CREDENTIALS = '3'       // Jenkins 凭证 ID
-    }
-    
-    // 构建参数
-    parameters {
-        choice(name: 'ENV', choices: ['development', 'production'], description: '部署环境')
-        string(name: 'BRANCH', defaultValue: 'main', description: '代码分支')
+        SSH_CREDENTIALS = '3y'       // Jenkins 凭证 ID
     }
     
     stages {
-        // 检出代码
         stage('检出代码') {
             steps {
-                script {
-                    // 清理工作空间
-                    cleanWs()
-                    
-                    // 检出代码
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: "*/${params.BRANCH}"]],
-                        extensions: [],
-                        userRemoteConfigs: [[url: REPO_URL]]
-                    ])
-                }
+                // 清理工作空间
+                cleanWs()
+                
+                // 检出代码
+                git url: REPO_URL, branch: 'main'
             }
         }
         
-        // 安装依赖
-        stage('安装依赖') {
+        stage('构建') {
             steps {
-                script {
-                    try {
-                        sh '''
-                            npm config set registry https://registry.npmmirror.com
-                            npm ci
-                        '''
-                    } catch (err) {
-                        echo "依赖安装失败，尝试使用 npm install"
-                        sh 'npm install'
-                    }
-                }
+                sh '''
+                    npm config set registry https://registry.npmmirror.com
+                    npm ci
+                    npm run build
+                '''
             }
         }
         
-        // 项目构建
-        stage('项目构建') {
+        stage('部署') {
             steps {
                 script {
-                    // 根据环境参数选择构建命令
-                    if (params.ENV == 'production') {
-                        sh 'npm run build'
-                    } else {
-                        sh 'npm run build:dev'
-                    }
-                }
-            }
-        }
-        
-        // 部署到服务器
-        stage('部署项目') {
-            steps {
-                script {
-                    // 使用 SSH 凭证
                     sshagent(credentials: [SSH_CREDENTIALS]) {
-                        // 1. 创建备份
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} '
-                                if [ -d "${REMOTE_PATH}" ]; then
-                                    timestamp=\$(date +%Y%m%d_%H%M%S)
-                                    backup_dir="${REMOTE_PATH}_backup_\${timestamp}"
-                                    cp -r ${REMOTE_PATH} \$backup_dir
-                                    echo "Created backup at \$backup_dir"
-                                fi
-                            '
-                        """
-                        
-                        // 2. 创建部署目录
+                        // 创建远程目录
                         sh """
                             ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} '
                                 mkdir -p ${REMOTE_PATH}
                             '
                         """
                         
-                        // 3. 复制构建文件到服务器
+                        // 复制文件
                         sh """
                             scp -r dist/* ${REMOTE_USER}@${REMOTE_SERVER}:${REMOTE_PATH}/
-                        """
-                        
-                        // 4. 设置权限
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} '
-                                chmod -R 755 ${REMOTE_PATH}
-                                chown -R www-data:www-data ${REMOTE_PATH}
-                            '
-                        """
-                        
-                        // 5. 清理旧备份（保留最近5个）
-                        sh """
-                            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} '
-                                cd ${REMOTE_PATH%/*}
-                                ls -td ${PROJECT_NAME}_backup_* 2>/dev/null | tail -n +6 | xargs -r rm -rf
-                            '
                         """
                     }
                 }
@@ -121,32 +60,8 @@ pipeline {
         }
     }
     
-    // 构建后操作
     post {
-        success {
-            echo """
-                =================== 部署成功 ===================
-                项目名称: ${PROJECT_NAME}
-                部署环境: ${params.ENV}
-                部署分支: ${params.BRANCH}
-                部署路径: ${REMOTE_PATH}
-                =============================================
-            """
-        }
-        
-        failure {
-            echo """
-                =================== 部署失败 ===================
-                项目名称: ${PROJECT_NAME}
-                部署环境: ${params.ENV}
-                部署分支: ${params.BRANCH}
-                请检查构建日志！
-                =============================================
-            """
-        }
-        
         always {
-            // 清理工作空间
             cleanWs()
         }
     }
