@@ -78,7 +78,7 @@ function addModel() {
   // 添加加载进度提示
   const loadingManager = new THREE.LoadingManager();
   loadingManager.onProgress = function (url: string, loaded: number, total: number) {
-    console.log(`Loading: ${(loaded / total) * 100}%`);
+    console.log(`Loading: ${(loaded / total) * 100}%`,url);
   };
 
   loader.setPath("src/assets/models/pack/"); // 设置模型路径
